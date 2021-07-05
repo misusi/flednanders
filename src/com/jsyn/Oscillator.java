@@ -1,5 +1,6 @@
 package com.jsyn;
 
+import com.jsyn.utils.RefWrapper;
 import com.jsyn.utils.Utils;
 import org.lwjgl.system.CallbackI;
 
@@ -12,107 +13,97 @@ import java.awt.image.BufferedImage;
 import java.util.Random;
 
 public class Oscillator extends SynthControlContainer {
-    private Waveform waveform = Waveform.Sine;
     private static final int TONE_OFFSET_LIMIT = 2000;
 //    public static final double FREQUENCY = 440;
     private double keyFrequency;
-    private double frequency;
-    private int toneOffset;
-    private int wavePos;
-    private final Random random = new Random();
+    private int wavetableStepSize;
+    private int wavetableIndex;
+    private RefWrapper<Integer> toneOffset = new RefWrapper<>(0);
+    private RefWrapper<Integer> volume = new RefWrapper<>(100);
     private int freqMultiplier = 10000;
+    private Wavetable wavetable = Wavetable.Sine;
 
     public Oscillator(Synthesizer synth) {
         super(synth);
-        JComboBox<Waveform> comboBox = new JComboBox<>
-                (new Waveform[]{Waveform.Sine, Waveform.Square, Waveform.Saw, Waveform.Triangle, Waveform.Noise});
-        comboBox.setSelectedItem(Waveform.Sine);
+        JComboBox<Wavetable> comboBox = new JComboBox<>(Wavetable.values());
+        comboBox.setSelectedItem(Wavetable.Sine);
         comboBox.setBounds(10,10,75,25);
         comboBox.addItemListener(l -> {
             if (l.getStateChange() == ItemEvent.SELECTED) {
-                waveform = (Waveform) l.getItem();
+                wavetable = (Wavetable) l.getItem();
             }
+            synth.updateWaveViewer();
         });
         add(comboBox);
         JLabel toneParameter = new JLabel("x0.000");
         toneParameter.setBounds(165, 65, 60, 25);
         toneParameter.setBorder(Utils.WindowDesign.LINE_BORDER);
-        toneParameter.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                final Cursor BLANK_CURSOR = Toolkit.getDefaultToolkit().createCustomCursor(
-                        new BufferedImage(16,16,BufferedImage.TYPE_INT_ARGB), new Point(0,0),"blank_cursor");
-                setCursor(BLANK_CURSOR);
-                mouseClickLocation = e.getLocationOnScreen();
-            }
-
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                setCursor(Cursor.getDefaultCursor());
-            }
-        });
-        toneParameter.addMouseMotionListener(new MouseAdapter() {
-            @Override
-            public void mouseDragged(MouseEvent e) {
-                if (mouseClickLocation.y != e.getYOnScreen()) {
-                    boolean mouseMovingUp = mouseClickLocation.y - e.getYOnScreen() > 0;
-                    if (mouseMovingUp && toneOffset < TONE_OFFSET_LIMIT) {
-                        ++toneOffset;
-                    }
-                    else if (!mouseMovingUp && toneOffset > -TONE_OFFSET_LIMIT) {
-                        --toneOffset;
-                    }
-                    applyToneOffset();
-                    toneParameter.setText("x" + String.format("%.3f", getToneOffset()));
-                }
-                Utils.ParameterHandling.PARAMETER_ROBOT.mouseMove(mouseClickLocation.x, mouseClickLocation.y);
-            }
+        Utils.ParameterHandling.addParameterMouseListeners(toneParameter, this,
+                -TONE_OFFSET_LIMIT, TONE_OFFSET_LIMIT, 1, toneOffset, () -> {
+            applyToneOffset();
+            toneParameter.setText(" x" + String.format("%.3f",getToneOffset()));
+            synth.updateWaveViewer();
         });
         add(toneParameter);
         JLabel toneText = new JLabel("Tone");
         toneText.setBounds(172, 45, 75,25);
         add(toneText);
+        JLabel volumeParameter = new JLabel(" 100%");
+        volumeParameter.setBounds(222, 65, 50, 25);
+        volumeParameter.setBorder(Utils.WindowDesign.LINE_BORDER);
+        Utils.ParameterHandling.addParameterMouseListeners(volumeParameter, this, 0, 100, 1, volume, () -> {
+            volumeParameter.setText(" " + volume.val + "% ");
+            synth.updateWaveViewer();
+        });
+        add(volumeParameter);
+        JLabel volumeText = new JLabel("Volume");
+        volumeText.setBounds(225, 40, 75, 25);
+        add(volumeText);
         setSize(279, 100);
         setBorder(Utils.WindowDesign.LINE_BORDER);
         setLayout(null);
     }
 
+    public double getNextSample() {
+        double sample = wavetable.getSamples()[wavetableIndex] * getVolumeMultiplier();
+        wavetableIndex = (wavetableIndex + wavetableStepSize) % Wavetable.SIZE;
+        return sample;
+    }
+
+
+
     public enum Waveform {
         Sine, Square, Saw, Triangle, Noise
     }
 
-    public double getKeyFrequency() {
-        return frequency;
-    }
     public void setKeyFrequency(double frequency) {
-        keyFrequency = this.frequency = frequency;
+        keyFrequency = frequency;
         applyToneOffset();
     }
+
+    public double[] getSampleWaveform(int numSamples) {
+        double[] samples = new double[numSamples];
+        double frequency = 1.0 / (numSamples / (double) Synthesizer.AudioInfo.SAMPLE_RATE) * 3.0; // 3.0 shows move waveform
+        int index = 0;
+        int stepSize = (int) (Wavetable.SIZE * Utils.Math.offsetTone(frequency, getToneOffset()) / Synthesizer.AudioInfo.SAMPLE_RATE);
+        for (int i = 0; i < numSamples; ++i) {
+            samples[i] = wavetable.getSamples()[index] * getVolumeMultiplier();
+            index = (index + stepSize) % Wavetable.SIZE;
+        }
+        return samples;
+    }
+
     private double getToneOffset()
     {
-        return toneOffset / 1000d;
+        return toneOffset.val / 1000.0;
     }
 
-    public double nextSample() {
-        double tDivP = (wavePos++ / (double) Synthesizer.AudioInfo.SAMPLE_RATE) / (1d / frequency);
-        switch (waveform) {
-            case Sine:
-                return Math.sin(Utils.Math.frequencyToAngularFrequency(frequency * (wavePos - 1) / Synthesizer.AudioInfo.SAMPLE_RATE));
-            case Square:
-                return Math.signum(Math.sin(Utils.Math.frequencyToAngularFrequency(frequency * (wavePos - 1) / Synthesizer.AudioInfo.SAMPLE_RATE)));
-            case Saw:
-                return 2d * (tDivP - Math.floor(0.5 + tDivP));
-            case Triangle:
-                return 2d * Math.abs(2d * (tDivP - Math.floor(0.5 + tDivP))) - 1;
-            case Noise:
-                return random.nextDouble();
-            default:
-                throw new RuntimeException("Oscillator set to unknown waveform");
-        }
+    private double getVolumeMultiplier() {
+        return volume.val / 100.0;
     }
+
 
     private void applyToneOffset() {
-        frequency = keyFrequency * Math.pow(2, getToneOffset());
-        System.out.println(frequency);
+        wavetableStepSize = (int) (Wavetable.SIZE * Utils.Math.offsetTone(keyFrequency, getToneOffset()) / Synthesizer.AudioInfo.SAMPLE_RATE);
     }
 }

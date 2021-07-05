@@ -12,6 +12,7 @@ import java.util.HashMap;
 public class Synthesizer {
     private final JFrame frame = new JFrame("JSyn");
     private final Oscillator[] oscillators = new Oscillator[3];
+    private final WaveViewer waveViewer = new WaveViewer(oscillators);
 
     private static final HashMap<Character, Double> KEY_FREQUENCIES = new HashMap<>();
 
@@ -27,7 +28,7 @@ public class Synthesizer {
 //            s[i] = (short) (10000 * (Short.MAX_VALUE + Math.sin((2 * Math.PI * 440) / AudioInfo.SAMPLE_RATE * wavePos++)));
             double d = 0;
             for (Oscillator o : oscillators) {
-                d += o.nextSample() / oscillators.length;
+                d += o.getNextSample() / oscillators.length;
                 // ^^ Say we have 2 oscillators
                 // One returns 1, the other 0.5.
                 // If we have more oscillators, they can overflow the short.
@@ -80,6 +81,8 @@ public class Synthesizer {
             frame.add(oscillators[i]);
             y += 105;
         }
+        waveViewer.setBounds(290, 0, 310, 310);
+        frame.add(waveViewer);
         frame.addKeyListener(keyAdapter);
         frame.addWindowListener(new WindowAdapter() {
             @Override
@@ -98,6 +101,10 @@ public class Synthesizer {
     public KeyAdapter getKeyAdapter()
     {
         return keyAdapter;
+    }
+
+    public void updateWaveViewer() {
+        waveViewer.repaint();
     }
 
     public static class AudioInfo {

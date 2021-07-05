@@ -5,7 +5,7 @@ import java.awt.*;
 import java.beans.VetoableChangeListener;
 
 public class SynthControlContainer extends JPanel {
-    protected Point mouseClickLocation;
+    private Point mouseClickLocation;
     private Synthesizer synth;
     protected boolean on;
     public SynthControlContainer(Synthesizer synth) {
@@ -17,6 +17,14 @@ public class SynthControlContainer extends JPanel {
     }
     public void setOn(boolean on) {
         this.on = on;
+    }
+
+    public Point getMouseClickLocation() {
+        return mouseClickLocation;
+    }
+
+    public void setMouseClickLocation(Point mouseClickLocation) {
+        this.mouseClickLocation = mouseClickLocation;
     }
 
     @Override
