@@ -18,7 +18,7 @@ public class WaveViewer extends JPanel {
     @Override
     public void paintComponent(Graphics graphics) {
         final int PAD = 20;
-        super.paintComponents(graphics);
+        super.paintComponent(graphics);
         Graphics2D graphics2D = (Graphics2D) graphics;
 
         int numSamples = getWidth() - PAD * 2;
